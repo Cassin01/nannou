@@ -2,17 +2,18 @@ use nannou::prelude::*;
 use rand::prelude::*;
 //use nannou::ui::prelude::*;
 
-use num_derive::FromPrimitive;    
-use num_traits::FromPrimitive;
+//use num_derive::FromPrimitive;
+//use num_traits::FromPrimitive;
 
 fn main() {
     nannou::app(model).event(event).simple_window(view).run();
 }
 
 fn model(app: &App) -> Model {
-    app.set_loop_mode(LoopMode::rate_fps(240.));
+    //app.set_loop_mode(LoopMode::rate_fps(240.));
+    app.set_loop_mode(LoopMode::rate_fps(12.));
 
-    let max_human: usize = 20;
+    let max_human: usize = 100;
     Model::new(max_human, app)
 }
 
@@ -25,7 +26,7 @@ fn event(_app: &App, model: &mut Model, _event: Event) {
             h.drive(width, height, &mut model.game);
             h.coll(width, height, &mut model.game);
             h.encount(width, height, &mut model.game);
-            h.hp -= 1;
+            h.hp -= 10;
             println!("hp: {}", h.hp);
             if h.hp < 0 {
                 h.state = State::Dead;
@@ -46,7 +47,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     let win = app.window_rect();
 
-    draw.rect().x_y(0.0, 30.0).w_h(10.0, 10.0).color(BLUE);
+    //draw.rect().x_y(0.0, 30.0).w_h(10.0, 10.0).color(BLUE);
 
     // フレームに書き出し
     for h in &model.humans {
@@ -55,38 +56,28 @@ fn view(app: &App, model: &Model, frame: Frame) {
         }
     }
 
-    let number_of_people =
+    let number_of_people: usize =
         model.humans.iter().fold(
             0,
             |acc, h| if h.state == State::Live { acc + 1 } else { acc },
         );
-    if number_of_people <= 2 {
+    if number_of_people <= 1 {
         for h in &model.humans {
             if h.state == State::Live {
                 dbg!(h.strategy.clone());
+                dbg!(h.character.clone());
+                //match h.strategy.clone() {
+                //    Strategy::TFT(x) => dbg!(x),
+                //    Strategy::AlwaysHonest(x) => dbg!(x),
+                //    Strategy::AlwaysDefects(x) => dbg!(x)
+                //};
             }
         }
     }
+    let s: String = number_of_people.to_string();
+    let s_slice: &str = &s[..];
+    draw.text(&("Number of people: ".to_owned() + s_slice)[..]);
 
-    //model.game.iter().enumerate()
-    //    .for_each(|(i, cell)| {
-    //        let color = match cell {
-    //            Cell::Live => WHITE,
-    //            Cell::Dead => return,
-    //        };
-    //        let xi = i % model.grid_size.x;
-    //        let yi = i / model.grid_size.x;
-    //        let x = model.cell_size/2.0 - model.width/2.0
-    //            + (xi as f32) * model.cell_size;
-    //        let y = -model.cell_size/2.0 + model.height/2.0
-    //            - (yi as f32) * model.cell_size;
-
-    //        draw.ellipse()
-    //            .x_y(x, y)
-    //            //.w_h(model.cell_size, model.cell_size)
-    //            .radius(model.cell_size)
-    //            .color(Rgb::new(1.0, 0.0, rand::thread_rng().gen()));
-    //        });
     draw.to_frame(app, &frame).unwrap();
 }
 
@@ -109,8 +100,23 @@ impl Model {
                 Human::new(
                     width,
                     height,
-                    Strategy::TFT(Person::Good),
-                    Character::Introverted,
+                    match thread_rng().gen_range(0..3) {
+                        0 => Strategy::TFT(Person::Good),
+                        1 => Strategy::AlwaysHonest(Person::Good),
+                        2 => Strategy::AlwaysDefects(Person::Bad),
+                        _ => {
+                            println!("Err");
+                            Strategy::TFT(Person::Good)
+                        }
+                    },
+                    match thread_rng().gen_range(0..2) {
+                        0 => Character::Introverted,
+                        1 => Character::Sociable,
+                        _ => {
+                            println!("Err");
+                            Character::Introverted
+                        }
+                    },
                 )
             })
             .collect();
@@ -176,7 +182,7 @@ pub struct Human {
 }
 
 impl Human {
-    fn new(width: usize, height: usize, strategy: Strategy, character: Character) -> Self {
+    fn new(width: usize, height: usize, mut strategy: Strategy, character: Character) -> Self {
         let mut rng = thread_rng();
         Self {
             xpos: rng.gen_range(0..width),
@@ -185,7 +191,7 @@ impl Human {
             direction: Direction::new(),
             timer: 0,
             //hp: rng.gen_range(500..1000),
-            hp: rng.gen_range(50..100),
+            hp: rng.gen_range(500..1000),
             strategy,
             character,
         }
@@ -292,10 +298,20 @@ impl Human {
                     [((self.ypos as isize + j + height) % height) as usize]
                 {
                     match (other_person, self.strategy.person()) {
-                        (Person::Bad, Person::Bad) => self.hp -= 10,
-                        (Person::Bad, Person::Good) => self.hp -= 5,
-                        (Person::Good, Person::Bad) => self.hp += 1,
-                        (Person::Good, Person::Good) => self.hp += 2,
+                        (Person::Bad, Person::Bad) => self.hp -= 2,
+                        (Person::Bad, Person::Good) => {
+                            self.hp -= 3;
+                            if let Strategy::TFT(_) = self.strategy.clone() {
+                                self.strategy = Strategy::TFT(Person::Bad);
+                            }
+                        }
+                        (Person::Good, Person::Bad) => {
+                            self.hp -= 2;
+                            if let Strategy::TFT(_) = self.strategy.clone() {
+                                self.strategy = Strategy::TFT(Person::Good);
+                            }
+                        },
+                        (Person::Good, Person::Good) => self.hp += 1,
                     }
                 }
                 game[self.xpos][self.ypos] = Object::Human(self.strategy.person());
@@ -336,36 +352,3 @@ impl Strategy {
         }
     }
 }
-// #[derive(Copy, Clone)]
-// struct AlwaysDefects {
-//     person: Person
-// }
-//impl AlwaysDefects {
-//    fn new() -> Self {
-//        Self {
-//            person: Person::Bad
-//        }
-//    }
-//}
-//#[derive(Copy, Clone)]
-//struct AlwaysHonest {
-//    person: Person
-//}
-//impl AlwaysHonest {
-//    fn new() -> Self {
-//        Self {
-//            person: Person::Good
-//        }
-//    }
-//}
-//#[derive(Copy, Clone)]
-//struct TFT {
-//    person: Person
-//}
-//impl TFT {
-//    fn new() -> Self {
-//        Self {
-//            person: Person::Good
-//        }
-//    }
-//}
